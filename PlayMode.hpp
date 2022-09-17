@@ -2,6 +2,7 @@
 
 #include "Scene.hpp"
 #include "Sound.hpp"
+#include "Game.hpp"
 
 #include <glm/glm.hpp>
 
@@ -27,6 +28,9 @@ struct PlayMode : Mode {
 
 	//local copy of the game scene (so code can change it during gameplay):
 	Scene scene;
+
+	// Game
+	Game::Game game;
 
 	//hexapod leg to wobble:
 	Scene::Transform *hip = nullptr;
