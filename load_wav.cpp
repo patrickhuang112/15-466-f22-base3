@@ -46,5 +46,5 @@ void load_wav(std::string const &filename, std::vector< float > *data_) {
 		min = std::min(min, d);
 		max = std::max(max, d);
 	}
-	std::cout << "Range: " << min << ", " << max << std::endl;
+	// std::cout << "Range: " << min << ", " << max << std::endl;
 }

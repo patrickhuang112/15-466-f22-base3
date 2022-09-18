@@ -41,36 +41,49 @@ Load< Sound::Sample > dusty_floor_sample(LoadTagDefault, []() -> Sound::Sample c
 });
 
 PlayMode::PlayMode() : scene(*hexapod_scene) {
-	//get pointers to leg for convenience:
-	for (auto &transform : scene.transforms) {
-		if (transform.name == "Hip.FL") hip = &transform;
-		else if (transform.name == "UpperLeg.FL") upper_leg = &transform;
-		else if (transform.name == "LowerLeg.FL") lower_leg = &transform;
-	}
-	if (hip == nullptr) throw std::runtime_error("Hip not found.");
-	if (upper_leg == nullptr) throw std::runtime_error("Upper leg not found.");
-	if (lower_leg == nullptr) throw std::runtime_error("Lower leg not found.");
-
-	hip_base_rotation = hip->rotation;
-	upper_leg_base_rotation = upper_leg->rotation;
-	lower_leg_base_rotation = lower_leg->rotation;
-
 	//get pointer to camera for convenience:
 	if (scene.cameras.size() != 1) throw std::runtime_error("Expecting scene to have exactly one camera, but it has " + std::to_string(scene.cameras.size()));
 	camera = &scene.cameras.front();
 
-	//start music loop playing:
-	// (note: position will be over-ridden in update())
-	leg_tip_loop = Sound::loop_3D(*dusty_floor_sample, 1.0f, get_leg_tip_position(), 10.0f);
+	game.play_intro_audio();
 }
 
 PlayMode::~PlayMode() {
 }
 
 bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size) {
-	if (!game.capture_input) {
+	if (!game.capture_input || game.game_over) {
 		return false;	
 	}
+	// Intro
+	if (game.state == Game::Intro) {
+		if (evt.type == SDL_KEYUP) {
+			if (evt.key.keysym.sym == SDLK_h){
+				game.hard = true;
+				game.state = Game::Transition;
+				game.time_passed = 0.f;
+				game.capture_input = false;
+				if (current != nullptr) {
+					game.current->stop();
+					game.current = nullptr;	
+				}
+				return true;
+			}
+			if (evt.key.keysym.sym == SDLK_n){
+				game.hard = false;
+				game.state = Game::Transition;	
+				game.time_passed = 0.f;
+				game.capture_input = false;
+				if (current != nullptr) {
+					game.current->stop();
+					game.current = nullptr;	
+				}
+				return true;
+			}
+		}	
+		return false;
+	}
+
 	if (evt.type == SDL_KEYUP) {
 		switch(evt.key.keysym.sym) {
 			case SDLK_a:
@@ -110,17 +123,16 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			case SDLK_9:
 			case SDLK_0:
 				if (game.match_letter(static_cast<char>(evt.key.keysym.sym))) {
-					game.display_correct_letter();
-					if (game.word_matched()) {
-						game.next_word();
+					game.mark_correct();
+					game.next_letter();
+					if (game.word_matched() && !game.next_word()) {
 						game.begin_playing_word_audio();
 					} 
-					else {
-						game.next_letter();
-					}
 				}
 				else {
-					game.display_wrong_letter();
+					game.mark_incorrect();
+					// Each mistake, add one to the game score
+					game.score += 1.0f;
 				}
 				return true;
 		}
@@ -129,35 +141,41 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 }
 
 void PlayMode::update(float elapsed) {
-	if (!game.capture_input) {
-		game.play_word_audio();	
+	if (game.game_over) {
+		return;
 	}
-
+	switch(game.state) {
+		case Game::Transition:
+			if (game.play_transition_audio()) {
+				game.time_passed = 0.f;	
+				game.state = Game::Word;
+			}
+			break;
+		case Game::Word:
+			game.play_word_audio(elapsed);
+			break;	
+		case Game::Capture:
+			for (auto& letter : game.letters) {
+				if (letter.incorrect) {
+					letter.incorrect_time += elapsed;	
+					if (letter.incorrect_time > Game::INCORRECT_FADE) {
+						letter.incorrect = false;	
+						letter.incorrect_time = 0.f;
+					}
+				}	
+			}
+			game.time_passed += elapsed;
+			break;
+	}
 }
 
 void PlayMode::draw(glm::uvec2 const &drawable_size) {
-	//update camera aspect ratio for drawable:
-	camera->aspect = float(drawable_size.x) / float(drawable_size.y);
-
-	//set up light type and position for lit_color_texture_program:
-	// TODO: consider using the Light(s) in the scene to do this
-	glUseProgram(lit_color_texture_program->program);
-	glUniform1i(lit_color_texture_program->LIGHT_TYPE_int, 1);
-	glUniform3fv(lit_color_texture_program->LIGHT_DIRECTION_vec3, 1, glm::value_ptr(glm::vec3(0.0f, 0.0f,-1.0f)));
-	glUniform3fv(lit_color_texture_program->LIGHT_ENERGY_vec3, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 0.95f)));
-	glUseProgram(0);
-
-	glClearColor(0.5f, 0.5f, 0.5f, 1.0f);
-	glClearDepth(1.0f); //1.0 is actually the default value to clear the depth buffer to, but FYI you can change it.
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-	glEnable(GL_DEPTH_TEST);
-	glDepthFunc(GL_LESS); //this is the default depth comparison function, but FYI you can change it.
-
-	scene.draw(*camera);
-
 	{ //use DrawLines to overlay some text:
 		glDisable(GL_DEPTH_TEST);
+		// Clear previously drawn text
+		glClearColor(0.0, 0.0, 0.0, 1.0);
+		glClear(GL_COLOR_BUFFER_BIT);
+
 		float aspect = float(drawable_size.x) / float(drawable_size.y);
 		DrawLines lines(glm::mat4(
 			1.0f / aspect, 0.0f, 0.0f, 0.0f,
@@ -166,16 +184,79 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 			0.0f, 0.0f, 0.0f, 1.0f
 		));
 
-		constexpr float H = 0.09f;
-		lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
-			glm::vec3(-aspect + 0.1f * H, -1.0 + 0.1f * H, 0.0),
-			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-			glm::u8vec4(0x00, 0x00, 0x00, 0x00));
-		float ofs = 2.0f / drawable_size.y;
-		lines.draw_text("Mouse motion rotates camera; WASD moves; escape ungrabs mouse",
-			glm::vec3(-aspect + 0.1f * H + ofs, -1.0 + + 0.1f * H + ofs, 0.0),
-			glm::vec3(H, 0.0f, 0.0f), glm::vec3(0.0f, H, 0.0f),
-			glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+		constexpr float text_size = 0.15f;
+		// calculated from pure experimentation since it doesn't make sense 
+		// logically
+		constexpr float text_size_divisor_for_mid = 5.3f;
+		std::string text = "";
+		if (game.game_over) {
+			text = "Game over!"; 
+			lines.draw_text(text,
+			glm::vec3(0.f - (static_cast<float>(text.length()) * text_size / text_size_divisor_for_mid), 0.f, 0.0),
+			glm::vec3(text_size, 0.0f, 0.0f), glm::vec3(0.0f, text_size, 0.0f),
+			Game::DEFAULT_COLOR);
+
+			text = "Your score was: " + std::to_string(game.score); 
+			lines.draw_text(text,
+			glm::vec3(0.f - (static_cast<float>(text.length()) * text_size / text_size_divisor_for_mid), -.2f, 0.0),
+			glm::vec3(text_size, 0.0f, 0.0f), glm::vec3(0.0f, text_size, 0.0f),
+			Game::DEFAULT_COLOR);
+		}
+		else {
+			switch(game.state) {
+				case Game::Intro: 
+					text = "Press H for hard difficulty, press N for normal difficulty"; 
+					lines.draw_text(text,
+					glm::vec3(0.f - (static_cast<float>(text.length()) * text_size / text_size_divisor_for_mid), 0.f, 0.0),
+					glm::vec3(text_size, 0.0f, 0.0f), glm::vec3(0.0f, text_size, 0.0f),
+					glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+					break;
+				case Game::Transition:
+					text = "Here is the next sequence..."; 
+					lines.draw_text(text,
+					glm::vec3(0.f - (static_cast<float>(text.length()) * text_size / text_size_divisor_for_mid), 0.f, 0.0),
+					glm::vec3(text_size, 0.0f, 0.0f), glm::vec3(0.0f, text_size, 0.0f),
+					glm::u8vec4(0xff, 0xff, 0xff, 0x00));
+					break;
+				case Game::Capture:
+					uint32_t original_len = static_cast<uint32_t>(game.letters.size());
+					uint32_t len = original_len * 7;
+					float float_len = static_cast<float>(len);
+					float offset = (float_len * text_size / text_size_divisor_for_mid) / (float_len / 2.f);
+					float letter_offset = offset * 7.f;
+					float initial_x = 0.f - (float_len * text_size / text_size_divisor_for_mid);
+					for (uint32_t i = 0; i < original_len; ++i) {
+						float x = initial_x + (letter_offset * static_cast<float>(i)) + 3.f * offset;	
+						glm::u8vec4	color; 
+						if (game.letters[i].incorrect) {
+							assert(!game.letters[i].displayed);
+							float fraction = (Game::INCORRECT_FADE - game.letters[i].incorrect_time) / Game::INCORRECT_FADE;
+							float r = Game::INCORRECT_COLOR.x * (fraction) + ((float)0xff) * (1.f - fraction);
+							float g = Game::INCORRECT_COLOR.y * (fraction) + ((float)0xff) * (1.f - fraction);
+							float b = Game::INCORRECT_COLOR.z * (fraction) + ((float)0xff) * (1.f - fraction);
+							color = glm::u8vec4((int)r, (int)g, (int)b, 0x00);
+							text = "?";	
+						}
+						else if (game.letters[i].displayed) {
+							text = std::string(1, game.letters[i].letter);
+							color = Game::CORRECT_COLOR;
+						}
+						else if (i == game.current_selected()) {
+							text = "?";	
+							color = Game::SELECTED_COLOR;
+						}
+						else {
+							text = "?";
+							color = Game::DEFAULT_COLOR;
+						}
+						lines.draw_text(text,
+						glm::vec3(x, 0.f, 0.0),
+						glm::vec3(text_size, 0.0f, 0.0f), glm::vec3(0.0f, text_size, 0.0f),
+						color);
+					}
+					break;
+			}
+		}
 	}
 	GL_ERRORS();
 }
