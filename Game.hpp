@@ -13,7 +13,7 @@
 
 namespace Game {
 
-constexpr uint32_t WORD_LIST_SIZE = 3;
+constexpr uint32_t WORD_LIST_SIZE = 5;
 constexpr float INCORRECT_FADE = 3.f;
 constexpr uint32_t NUM_SOUNDS = 36;
 const glm::u8vec4 INCORRECT_COLOR = glm::u8vec4(0xf4, 0x04, 0x2c, 0x00);
@@ -99,10 +99,15 @@ constexpr std::array<std::pair<char, const char *>, NUM_SOUNDS> HARD_SOUND_PATHS
 
 const std::string INTRO_AUDIO_PATH = "intro.wav";
 const std::string TRANSITION_AUDIO_PATH = "transition.wav";
+// If you want custom words, please don't put more than 21 character sequences as
+// it won't all be drawn on the screen
+// ALSO PLEASE DON'T USE SPACES
 const std::array<std::string, WORD_LIST_SIZE> WORD_LIST {
-    "racecar",
-    "1234",
-    "ok" 
+    "easierone",
+    "slightlyharder",
+    "thiisoneishaard",
+    "thiisnoooowahrdder",
+    "aofjekbnaksofiejalbp"
 };
 
 

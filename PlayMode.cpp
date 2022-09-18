@@ -220,13 +220,13 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 					break;
 				case Game::Capture:
 					uint32_t original_len = static_cast<uint32_t>(game.letters.size());
-					uint32_t len = original_len * 7;
+					uint32_t len = original_len * 3;
 					float float_len = static_cast<float>(len);
 					float offset = (float_len * text_size / text_size_divisor_for_mid) / (float_len / 2.f);
-					float letter_offset = offset * 7.f;
+					float letter_offset = offset * 3.f;
 					float initial_x = 0.f - (float_len * text_size / text_size_divisor_for_mid);
 					for (uint32_t i = 0; i < original_len; ++i) {
-						float x = initial_x + (letter_offset * static_cast<float>(i)) + 3.f * offset;	
+						float x = initial_x + (letter_offset * static_cast<float>(i)) + 1.f * offset;	
 						glm::u8vec4	color; 
 						if (game.letters[i].incorrect) {
 							assert(!game.letters[i].displayed);
