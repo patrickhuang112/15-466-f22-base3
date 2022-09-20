@@ -103,13 +103,12 @@ const std::string TRANSITION_AUDIO_PATH = "sounds/transition.opus";
 // it won't all be drawn on the screen
 // ALSO PLEASE DON'T USE SPACES
 const std::array<std::string, WORD_LIST_SIZE> WORD_LIST {
-    "easierone",
-    "slightlyharder",
-    "thiisoneishaard",
-    "thiisnoooowahrdder",
+    "easy",
+    "hhaarder",
+    "thiisaneishaard",
+    "thsnoooooowahrdir",
     "aofjekbnaksofiejalbp"
 };
-
 
 struct Letter {
     Letter(char c) {
@@ -154,6 +153,9 @@ struct Game {
         game_over = false;
         difficulty_selected = false;
         state = Intro;
+        replay = false;
+        mistakes = 0;
+        replays = 0;
         // Load all audio samples
         for (const auto& p : SOUND_PATHS) {
             assert(audio.find(p.first) == audio.end());
@@ -176,7 +178,10 @@ struct Game {
     bool difficulty_selected;
     float time_passed;
     float score;
+    uint32_t mistakes;
+    uint32_t replays;
     bool hard;
+    bool replay;
     AudioState state;
     uint32_t current_selected();
     void begin_playing_word_audio();

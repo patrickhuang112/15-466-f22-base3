@@ -32,7 +32,7 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 				game.state = Game::Transition;
 				game.time_passed = 0.f;
 				game.capture_input = false;
-				if (current != nullptr) {
+				if (game.current != nullptr) {
 					game.current->stop();
 					game.current = nullptr;	
 				}
@@ -43,7 +43,7 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 				game.state = Game::Transition;	
 				game.time_passed = 0.f;
 				game.capture_input = false;
-				if (current != nullptr) {
+				if (game.current != nullptr) {
 					game.current->stop();
 					game.current = nullptr;	
 				}
@@ -101,8 +101,12 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 				else {
 					game.mark_incorrect();
 					// Each mistake, add one to the game score
-					game.score += 1.0f;
+					game.mistakes += 1;
 				}
+				return true;
+			case SDLK_RETURN:
+				game.replay = true;	
+				game.replays += 1;
 				return true;
 		}
 	}
@@ -124,6 +128,9 @@ void PlayMode::update(float elapsed) {
 			game.play_word_audio(elapsed);
 			break;	
 		case Game::Capture:
+			if (game.replay) {
+				game.play_word_audio(elapsed);
+			}
 			for (auto& letter : game.letters) {
 				if (letter.incorrect) {
 					letter.incorrect_time += elapsed;	
@@ -170,6 +177,18 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 			glm::vec3(0.f - (static_cast<float>(text.length()) * text_size / text_size_divisor_for_mid), -.2f, 0.0),
 			glm::vec3(text_size, 0.0f, 0.0f), glm::vec3(0.0f, text_size, 0.0f),
 			Game::DEFAULT_COLOR);
+
+			text = "Number of mistakes: " + std::to_string(game.mistakes); 
+			lines.draw_text(text,
+			glm::vec3(0.f - (static_cast<float>(text.length()) * text_size / text_size_divisor_for_mid), -.5f, 0.0),
+			glm::vec3(text_size, 0.0f, 0.0f), glm::vec3(0.0f, text_size, 0.0f),
+			Game::DEFAULT_COLOR);
+
+			text = "Number of replays: " + std::to_string(game.replays); 
+			lines.draw_text(text,
+			glm::vec3(0.f - (static_cast<float>(text.length()) * text_size / text_size_divisor_for_mid), -.7f, 0.0),
+			glm::vec3(text_size, 0.0f, 0.0f), glm::vec3(0.0f, text_size, 0.0f),
+			Game::DEFAULT_COLOR);
 		}
 		else {
 			switch(game.state) {
@@ -200,9 +219,9 @@ void PlayMode::draw(glm::uvec2 const &drawable_size) {
 						if (game.letters[i].incorrect) {
 							assert(!game.letters[i].displayed);
 							float fraction = (Game::INCORRECT_FADE - game.letters[i].incorrect_time) / Game::INCORRECT_FADE;
-							float r = Game::INCORRECT_COLOR.x * (fraction) + ((float)0xff) * (1.f - fraction);
-							float g = Game::INCORRECT_COLOR.y * (fraction) + ((float)0xff) * (1.f - fraction);
-							float b = Game::INCORRECT_COLOR.z * (fraction) + ((float)0xff) * (1.f - fraction);
+							float r = Game::INCORRECT_COLOR.x * (fraction) + ((float)Game::SELECTED_COLOR.x) * (1.f - fraction);
+							float g = Game::INCORRECT_COLOR.y * (fraction) + ((float)Game::SELECTED_COLOR.y) * (1.f - fraction);
+							float b = Game::INCORRECT_COLOR.z * (fraction) + ((float)Game::SELECTED_COLOR.z) * (1.f - fraction);
 							color = glm::u8vec4((int)r, (int)g, (int)b, 0x00);
 							text = "?";	
 						}

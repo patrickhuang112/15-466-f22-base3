@@ -14,6 +14,7 @@ void Game::mark_correct(){
 void Game::mark_incorrect() {
     letters[match_order[current_word_matched]].incorrect = true;
     letters[match_order[current_word_matched]].incorrect_time = 0.f; 
+
 }
 
 void Game::begin_playing_word_audio() {
@@ -39,10 +40,9 @@ bool Game::play_transition_audio() {
     return false;
 }
 
+
 void Game::play_word_audio(float elapsed) {
-    assert(!capture_input);
     uint32_t len = static_cast<uint32_t>(WORD_LIST[current_word].length());
-    assert(current_audio_letter >= 0 && current_audio_letter < len);
     if (current != nullptr) {
         if (current->stopped) {
             ++current_audio_letter; 
@@ -55,18 +55,29 @@ void Game::play_word_audio(float elapsed) {
             current = Sound::play(s);
         }
         else {
-            // For easy mode, add a slight delay between sounds
-            if (time_passed < 0.5f) {
-                time_passed += elapsed;
-                return; 
+            if (state == Word) {
+                // For easy mode, add a slight delay between sounds
+                // ONLY FOR INITIAL, REPLAYS DONT GET
+                if (time_passed < 0.5f) {
+                    time_passed += elapsed;
+                    return; 
+                }
+                time_passed = 0.f;
             }
-            time_passed = 0.f;
             Sound::Sample& s = audio.find(WORD_LIST[current_word][current_audio_letter])->second;
             current = Sound::play(s);
         }
     }
     if (current_audio_letter == len) {
-        begin_word_capture(); 
+        if (state == Word) {
+            begin_word_capture();
+            current_audio_letter = 0;
+        }
+        else if (state == Capture) {
+            current_audio_letter = 0;
+            replay = false; 
+            current = nullptr;
+        }
     }
 }
 
@@ -107,6 +118,10 @@ bool Game::word_matched() {
 }
 
 bool Game::next_word() {
+    if (current != nullptr) {
+       current->stop(); 
+       current = nullptr;
+    }
     score += time_passed;
     time_passed = 0.f;
     current_word_matched = 0;
@@ -116,7 +131,8 @@ bool Game::next_word() {
     state = Transition;
     if (current_word == WORD_LIST_SIZE) {
         game_over = true;
-        printf("SCORE: %f\n", score);
+        score += static_cast<float>(replays) * 10.f;
+        score += static_cast<float>(mistakes) * 2.f;
         return true;
     }
     return false;
